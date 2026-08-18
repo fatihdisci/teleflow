@@ -11,10 +11,19 @@ const b0ptCommands: Command[] = [
   "/piyasayd", "/kurum", "/doviz", "/halkaarz", "/viop", "/teminat", "/bulten", "/tlref", "/cds",
 ].map((text, index) => ({ id: 100 + index, text }));
 
+const freeDepthCommands: Command[] = ["/derinlik", "/akd", "/takas", "/teorik", "/kurum"].map((text, index) => ({ id: 300 + index, text }));
+
 const starter: Template[] = [
   { id: 1, name: "B0PT · Hisse ve piyasa", bot: "@b0pt_bot", commands: b0ptCommands },
   { id: 2, name: "Gün sonu özeti", bot: "@BOT_KULLANICI_ADI", commands: [{ id: 21, text: "/ozet" }] },
+  { id: 3, name: "Ücretsiz derinlik", bot: "@ucretsizderinlikbot", commands: freeDepthCommands },
 ];
+
+function mergeBuiltInPresets(items: Template[]) {
+  return items.some((template) => template.bot.toLowerCase() === "@ucretsizderinlikbot")
+    ? items
+    : [...items, starter[2]];
+}
 
 const TELEFLOW_STORAGE_KEY = "teleflow.local.v2";
 
@@ -50,6 +59,7 @@ export default function Home() {
   const [authPhase, setAuthPhase] = useState<"idle" | "code_required" | "password_required" | "authorized">("idle");
   const [savedSetup, setSavedSetup] = useState<{ apiId: string; phoneHint: string } | null>(null);
   const [storageReady, setStorageReady] = useState(false);
+  const [remoteReady, setRemoteReady] = useState(false);
   const runMessageAnchor = useRef(0);
   const selected = templates.find((template) => template.id === selectedId) ?? templates[0];
   const statusText = useMemo(() => ({ idle: "Hazır", running: "Çalışıyor", paused: "Duraklatıldı" }[status]), [status]);
@@ -59,7 +69,7 @@ export default function Home() {
       const raw = window.localStorage.getItem(TELEFLOW_STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as StoredState;
-        if (saved.templates?.length) setTemplates(saved.templates);
+        if (saved.templates?.length) setTemplates(mergeBuiltInPresets(saved.templates));
         if (saved.selectedId) setSelectedId(saved.selectedId);
         if (typeof saved.interval === "number") setInterval(saved.interval);
         if (saved.botUsername) setBotUsername(saved.botUsername);
@@ -82,6 +92,26 @@ export default function Home() {
     }
   }, [storageReady, templates, selectedId, interval, botUsername, commandArguments, messages]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/flows").then((response) => response.ok ? response.json() : null).then((data: { templates?: Template[] } | null) => {
+      if (cancelled || !data?.templates?.length) return;
+      const next = mergeBuiltInPresets(data.templates);
+      setTemplates(next);
+      setSelectedId(next[0]?.id ?? 0);
+      setBotUsername(next[0]?.bot ?? "@b0pt_bot");
+    }).catch(() => undefined).finally(() => { if (!cancelled) setRemoteReady(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!remoteReady) return;
+    const timer = window.setTimeout(() => {
+      fetch("/api/flows", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ templates }) }).catch(() => undefined);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [remoteReady, templates]);
+
   useEffect(() => { fetch("/api/telegram/setup").then((response) => response.ok ? response.json() : null).then((data: { configured?: boolean; apiId?: string; phoneHint?: string } | null) => { if (data?.configured && data.apiId && data.phoneHint) setSavedSetup({ apiId: data.apiId, phoneHint: data.phoneHint }); }).catch(() => undefined); fetch("/api/telegram/auth").then((response) => response.ok ? response.json() : null).then((data: { status?: "authorized" | "idle" } | null) => { if (data?.status) setAuthPhase(data.status); }).catch(() => undefined); }, []);
 
   function addCommand() { const value = newCommand.trim(); if (!value || !selected) return; updateSelected({ ...selected, commands: [...selected.commands, { id: Date.now(), text: value.startsWith("/") ? value : `/${value}` }] }); setNewCommand(""); }
@@ -95,7 +125,7 @@ export default function Home() {
   return <main className="app-shell">
     <header className="topbar"><div className="brand"><div className="brand-mark">T</div><div><strong>Teleflow</strong><span>Telegram komut akışları</span></div></div><div className="top-actions"><div className="connection-pill"><i /> {savedSetup ? "API bilgileri kaydedildi" : "Telegram bağlı değil"}</div><button className="avatar">FD</button></div></header>
     <div className="workspace"><aside className="sidebar"><div className="sidebar-label">ÇALIŞMA ALANI</div><Nav icon="⌁" label="Akışlar" active={tab === "flows"} onClick={() => setTab("flows")} /><Nav icon="▤" label="Şablonlar" active={tab === "templates"} onClick={() => setTab("templates")} /><Nav icon="⚙" label="Ayarlar" active={tab === "settings"} onClick={() => setTab("settings")} /><div className="sidebar-bottom"><div className="mini-card"><span className="shield">✓</span><div><strong>Güvenli alan</strong><small>Sırlar sunucuda şifreli</small></div></div></div></aside>
-      <section className="content">{tab === "flows" && <Flows template={selected} botUsername={botUsername} setBotUsername={setBotUsername} interval={interval} status={status} statusText={statusText} commands={selected?.commands ?? []} commandArguments={commandArguments} setCommandArguments={setCommandArguments} messages={messages} newCommand={newCommand} setNewCommand={setNewCommand} onAddCommand={addCommand} onDelete={(id) => selected && updateSelected({ ...selected, commands: selected.commands.filter((command) => command.id !== id) })} onRun={run} onPause={() => setStatus("paused")} onCancel={() => setStatus("idle")} />}{tab === "templates" && <Templates templates={templates} selectedId={selectedId} newTemplate={newTemplate} setNewTemplate={setNewTemplate} onAdd={addTemplate} onOpen={(id) => { setSelectedId(id); setBotUsername(templates.find((item) => item.id === id)?.bot ?? botUsername); setTab("flows"); }} onDelete={(id) => { setTemplates((items) => items.filter((item) => item.id !== id)); if (id === selectedId) setSelectedId(templates.find((item) => item.id !== id)?.id ?? 0); }} />}{tab === "settings" && <Settings interval={interval} setInterval={setInterval} botUsername={botUsername} setBotUsername={setBotUsername} savedSetup={savedSetup} onSetup={() => { setStep(savedSetup ? 3 : 1); setNotice(""); setSetupOpen(true); }} />}</section>
+      <section className="content">{tab === "flows" && <Flows template={selected} botUsername={botUsername} setBotUsername={setBotUsername} interval={interval} status={status} statusText={statusText} commands={selected?.commands ?? []} commandArguments={commandArguments} setCommandArguments={setCommandArguments} messages={messages} newCommand={newCommand} setNewCommand={setNewCommand} onAddCommand={addCommand} onDelete={(id) => selected && updateSelected({ ...selected, commands: selected.commands.filter((command) => command.id !== id) })} onRun={run} onPause={() => setStatus("paused")} onCancel={() => setStatus("idle")} />}{tab === "templates" && <Templates templates={templates} selectedId={selectedId} newTemplate={newTemplate} setNewTemplate={setNewTemplate} onAdd={addTemplate} onOpen={(id) => { setSelectedId(id); setBotUsername(templates.find((item) => item.id === id)?.bot ?? botUsername); setTab("flows"); }} onDelete={(id) => { setTemplates((items) => items.filter((item) => item.id !== id)); fetch(`/api/flows?id=${id}`, { method: "DELETE" }).catch(() => undefined); if (id === selectedId) setSelectedId(templates.find((item) => item.id !== id)?.id ?? 0); }} />}{tab === "settings" && <Settings interval={interval} setInterval={setInterval} botUsername={botUsername} setBotUsername={setBotUsername} savedSetup={savedSetup} onSetup={() => { setStep(savedSetup ? 3 : 1); setNotice(""); setSetupOpen(true); }} />}</section>
       <aside className="setup-panel"><div className="panel-kicker">✦ {savedSetup ? "KAYITLI KURULUM" : "İLK KURULUM"}</div><h2>{savedSetup ? "Bilgiler kaydedildi" : "Telegram hesabını bağla"}</h2><p>{savedSetup ? `${savedSetup.phoneHint} için API bilgileri sunucuda şifreli saklanıyor.` : "Bot tokenı gerekmez. Kişisel Telegram hesabınızı güvenli biçimde bağlayın."}</p><div className="secure-note"><span>⌘</span><div><strong>Güvenli saklama</strong><small>Gizli bilgiler tarayıcıya geri dönmez.</small></div></div><button className="setup-button" onClick={() => { setStep(savedSetup ? 3 : 1); setNotice(""); setSetupOpen(true); }}>{savedSetup ? "Kurulumu yönet" : "Kurulumu başlat"} <span>→</span></button></aside>
     </div><footer><span>Teleflow · Kullanıcı API’si ile çalışır</span><span>Gizlilik · Güvenlik · Yardım</span></footer>
     {setupOpen && <div className="modal-backdrop" onClick={() => setSetupOpen(false)}><div className="setup-modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setSetupOpen(false)}>×</button><div className="modal-icon">T</div><div className="eyebrow">GÜVENLİ KURULUM · ADIM {step}/3</div><h2>{step === 1 ? "Telegram API bilgileri" : step === 2 ? "Telefon numarası" : "Telegram doğrulaması"}</h2><p>{step === 1 ? "my.telegram.org üzerindeki API development tools bölümünden aldığınız bilgileri girin." : step === 2 ? "Telefon numaranızı ülke koduyla girin." : savedSetup ? `${savedSetup.phoneHint} için bilgiler Mac mini üzerinde şifreli saklanıyor.` : "Önce API bilgilerini kaydedin."}</p>{step === 1 && <div className="form-grid"><label>api_id<input value={apiId} onChange={(event) => setApiId(event.target.value)} placeholder="12345678" /></label><label>api_hash<input type="password" value={apiHash} onChange={(event) => setApiHash(event.target.value)} placeholder="32 karakter" /></label></div>}{step === 2 && <label>Telefon numarası<input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+90 5xx xxx xx xx" /></label>}{step === 3 && savedSetup && <div>{authPhase === "idle" && <button className="primary-button" disabled={saving} onClick={() => authenticate("send-code")}>Telegram kodu gönder</button>}{authPhase === "code_required" && <><label>Doğrulama kodu<input value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} placeholder="Telegram’dan gelen kod" /></label><button className="primary-button" disabled={saving} onClick={() => authenticate("verify-code")} style={{ marginTop: 12 }}>Kodu doğrula</button></>}{authPhase === "password_required" && <><label>İki aşamalı doğrulama parolası<input type="password" value={twoFactorPassword} onChange={(event) => setTwoFactorPassword(event.target.value)} placeholder="Parolanız" /></label><button className="primary-button" disabled={saving} onClick={() => authenticate("verify-password")} style={{ marginTop: 12 }}>Parolayı doğrula</button></>}{authPhase === "authorized" && <p className="save-message saved">Telegram hesabı bağlı. Akışları başlatabilirsiniz.</p>}</div>}{notice && <p className="save-message error">{notice}</p>}<div className="modal-actions"><button className="secondary-button" onClick={() => setSetupOpen(false)}>Kapat</button>{step < 3 && <button className="primary-button" disabled={saving} onClick={() => step === 1 ? setStep(2) : saveSetup()}>{step === 1 ? "Devam et" : saving ? "Kaydediliyor…" : "Güvenle kaydet"}</button>}{step === 3 && <button className="secondary-button" onClick={() => { setAuthPhase("idle"); setStep(1); }}>Bilgileri değiştir</button>}</div></div></div>}
