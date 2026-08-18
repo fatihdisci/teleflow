@@ -5,6 +5,14 @@ export const runtime = "edge";
 
 type SetupPayload = { apiId?: string; apiHash?: string; phone?: string };
 
+export async function GET() {
+  const user = await getChatGPTUser();
+  if (!user) return Response.json({ message: "Oturum doğrulanamadı." }, { status: 401 });
+  if (!env.DB) return Response.json({ message: "Güvenli kayıt alanı henüz hazır değil." }, { status: 503 });
+  const saved = await env.DB.prepare("SELECT api_id, phone_hint FROM telegram_secrets WHERE owner_id = ?").bind(user.userId).first<{ api_id: string; phone_hint: string }>();
+  return Response.json({ configured: Boolean(saved), apiId: saved?.api_id ?? null, phoneHint: saved?.phone_hint ?? null });
+}
+
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ message: "Oturum doğrulanamadı. Sayfayı yenileyip tekrar deneyin." }, { status: 401 });
