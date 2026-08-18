@@ -12,17 +12,20 @@ const b0ptCommands: Command[] = [
 ].map((text, index) => ({ id: 100 + index, text }));
 
 const freeDepthCommands: Command[] = ["/derinlik", "/akd", "/takas", "/teorik", "/kurum"].map((text, index) => ({ id: 300 + index, text }));
+const stockCommentCommands: Command[] = ["/stop", "/ta", "/yorum", "/sinyal", "/grafik", "/plus", "/zincir", "/takasrapor", "/detay", "/canli", "/akd", "/takas", "/sepet", "/temel", "/hedef", "/ortavadede", "/trend"].map((text, index) => ({ id: 400 + index, text }));
 
 const starter: Template[] = [
   { id: 1, name: "B0PT · Hisse ve piyasa", bot: "@b0pt_bot", commands: b0ptCommands },
   { id: 2, name: "Gün sonu özeti", bot: "@BOT_KULLANICI_ADI", commands: [{ id: 21, text: "/ozet" }] },
   { id: 3, name: "Ücretsiz derinlik", bot: "@ucretsizderinlikbot", commands: freeDepthCommands },
+  { id: 4, name: "Hisse yorumları", bot: "@hisseyorumbot", commands: stockCommentCommands },
 ];
 
 function mergeBuiltInPresets(items: Template[]) {
-  return items.some((template) => template.bot.toLowerCase() === "@ucretsizderinlikbot")
-    ? items
-    : [...items, starter[2]];
+  const next = [...items];
+  if (!next.some((template) => template.bot.toLowerCase() === "@ucretsizderinlikbot")) next.push(starter[2]);
+  if (!next.some((template) => template.bot.toLowerCase() === "@hisseyorumbot")) next.push(starter[3]);
+  return next;
 }
 
 const TELEFLOW_STORAGE_KEY = "teleflow.local.v2";
