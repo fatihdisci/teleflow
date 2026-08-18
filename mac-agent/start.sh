@@ -2,8 +2,16 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
+PYTHON_BIN="/opt/homebrew/bin/python3"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(command -v python3 || true)"
+fi
+if [[ -z "$PYTHON_BIN" || ! -x "$PYTHON_BIN" ]]; then
+  echo "Python 3 bulunamadı. Homebrew Python 3 kurulmalı."
+  exit 1
+fi
 if [[ ! -d .venv ]]; then
-  python3 -m venv .venv
+  "$PYTHON_BIN" -m venv .venv
   .venv/bin/pip install --upgrade pip
   .venv/bin/pip install -r requirements.txt
 fi
