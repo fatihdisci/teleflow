@@ -1,0 +1,7 @@
+import { sql } from "drizzle-orm";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const flows = sqliteTable("flows", { id: integer("id").primaryKey({ autoIncrement: true }), ownerId: text("owner_id").notNull(), name: text("name").notNull(), botUsername: text("bot_username").notNull(), intervalSeconds: integer("interval_seconds").notNull().default(4), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
+export const flowCommands = sqliteTable("flow_commands", { id: integer("id").primaryKey({ autoIncrement: true }), flowId: integer("flow_id").notNull(), command: text("command").notNull(), position: integer("position").notNull().default(0) });
+export const runHistory = sqliteTable("run_history", { id: integer("id").primaryKey({ autoIncrement: true }), ownerId: text("owner_id").notNull(), flowId: integer("flow_id").notNull(), command: text("command").notNull(), responseText: text("response_text").notNull().default(""), responseKind: text("response_kind").notNull().default("text"), status: text("status").notNull().default("received"), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
+export const telegramSecrets = sqliteTable("telegram_secrets", { ownerId: text("owner_id").primaryKey(), apiId: text("api_id").notNull(), encryptedApiHash: text("encrypted_api_hash").notNull(), encryptedSession: text("encrypted_session").notNull().default(""), phoneHint: text("phone_hint").notNull().default(""), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
