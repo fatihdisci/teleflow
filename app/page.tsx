@@ -8,7 +8,7 @@ type Message = { id: number; command: string; text: string; time: string; imageU
 type ChatMessage = { id: number; bot: string; command: string; text: string; time: string; imageUrl?: string };
 
 const b0ptCommands: Command[] = [
-  "/derinlik", "/akd", "/islem", "/teorik", "/takas", "/grafik", "/sirketkarti", "/detay", "/tum",
+  "/derinlik", "/akd", "/islem", "/teorik", "/teorikyd", "/takas", "/grafik", "/sirketkarti", "/detay", "/tum",
   "/piyasayd", "/kurum", "/doviz", "/halkaarz", "/viop", "/teminat", "/bulten", "/tlref", "/cds",
 ].map((text, index) => ({ id: 100 + index, text }));
 
@@ -24,24 +24,18 @@ const botCatalog = [
 ];
 
 const starter: Template[] = [
-  { id: 1, name: "B0PT · Hisse ve piyasa", bot: "@b0pt_bot", commands: b0ptCommands },
-  { id: 2, name: "Gün sonu özeti", bot: "@BOT_KULLANICI_ADI", commands: [{ id: 21, text: "/ozet" }] },
-  { id: 3, name: "Ücretsiz derinlik", bot: "@ucretsizderinlikbot", commands: freeDepthCommands },
-  { id: 4, name: "Hisse yorumları", bot: "@hisseyorumbot", commands: stockCommentCommands },
+  { id: 1, name: "Gün sonu özeti", bot: "@BOT_KULLANICI_ADI", commands: [{ id: 21, text: "/ozet" }] },
   { id: 5, name: "Son halka arzlar teorik (UDB)", bot: "@ucretsizderinlikbot", commands: ipoTheoreticalCommands },
   { id: 6, name: "Son halka arzlar teorik (BOPT)", bot: "@b0pt_bot", commands: ipoTheoreticalCommands.map((command) => ({ ...command, id: command.id + 100 })) },
   { id: 7, name: "Dikkat çekenler (BOPT)", bot: "@b0pt_bot", commands: attentionCommands(700) },
   { id: 8, name: "Dikkat çekenler (UDB)", bot: "@ucretsizderinlikbot", commands: attentionCommands(800) },
 ];
 
+const retiredTemplateNames = new Set(["B0PT · Hisse ve piyasa", "Ücretsiz derinlik", "Hisse yorumları"]);
+
 function mergeBuiltInPresets(items: Template[]) {
-  const next = [...items];
-  if (!next.some((template) => template.bot.toLowerCase() === "@ucretsizderinlikbot")) next.push(starter[2]);
-  if (!next.some((template) => template.bot.toLowerCase() === "@hisseyorumbot")) next.push(starter[3]);
-  if (!next.some((template) => template.name === starter[4].name)) next.push(starter[4]);
-  if (!next.some((template) => template.name === starter[5].name)) next.push(starter[5]);
-  if (!next.some((template) => template.name === starter[6].name)) next.push(starter[6]);
-  if (!next.some((template) => template.name === starter[7].name)) next.push(starter[7]);
+  const next = items.filter((template) => !retiredTemplateNames.has(template.name));
+  for (const preset of starter) if (!next.some((template) => template.name === preset.name)) next.push(preset);
   return next;
 }
 
@@ -130,8 +124,10 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/flows").then((response) => response.ok ? response.json() : null).then((data: { templates?: Template[] } | null) => {
+    fetch("/api/flows").then((response) => response.ok ? response.json() : null).then(async (data: { templates?: Template[] } | null) => {
       if (cancelled || !data?.templates?.length) return;
+      const retired = data.templates.filter((template) => retiredTemplateNames.has(template.name));
+      await Promise.all(retired.map((template) => fetch(`/api/flows?id=${template.id}`, { method: "DELETE" }).catch(() => undefined)));
       const next = mergeBuiltInPresets(data.templates);
       setTemplates(next);
       setSelectedId(next[0]?.id ?? 0);
