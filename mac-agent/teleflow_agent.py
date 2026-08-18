@@ -204,7 +204,7 @@ async def execute_run(job_id: str, payload: RunRequest, config: dict[str, Any]) 
                     try:
                         await conversation.send_message(command)
                         message = await conversation.get_response()
-                        message = await wait_for_edited_result(client, message)
+                        message = await wait_for_edited_result(client, message, payload.bot_username)
                         job["responses"].append(await serialize_message(client, message, command))
                         break
                     except FloodWaitError as error:
@@ -234,7 +234,7 @@ async def serialize_message(client: TelegramClient, message: Any, command: str) 
     return result
 
 
-async def wait_for_edited_result(client: TelegramClient, message: Any) -> Any:
+async def wait_for_edited_result(client: TelegramClient, message: Any, bot_username: str) -> Any:
     """Wait for bots that turn a progress message into the final media reply."""
     refreshed = await client.get_messages(message.chat_id, ids=message.id)
     if refreshed:
@@ -244,6 +244,8 @@ async def wait_for_edited_result(client: TelegramClient, message: Any) -> Any:
     progress_markers = (
         "veri alınıyor",
         "veri aliniyor",
+        "verisi alınıyor",
+        "verisi aliniyor",
         "hazırlanıyor",
         "hazirlaniyor",
         "işleniyor",
@@ -261,4 +263,8 @@ async def wait_for_edited_result(client: TelegramClient, message: Any) -> Any:
         refreshed = await client.get_messages(message.chat_id, ids=message.id)
         if refreshed and (refreshed.media or (refreshed.raw_text or "") != original_text):
             return refreshed
+        newer_messages = await client.get_messages(bot_username, limit=10)
+        for candidate in sorted(newer_messages or [], key=lambda item: item.id):
+            if candidate.id >= message.id and not candidate.out and (candidate.media or candidate.raw_text) and ((candidate.raw_text or "") != original_text or candidate.media):
+                return candidate
     return message
