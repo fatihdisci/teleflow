@@ -36,6 +36,10 @@ Bu özel servis Telegram kullanıcı hesabı bağlantısını Mac mini üzerinde
    ./install-launch-agent.sh
    ```
 
+   Kurulum, ajanı macOS'un LaunchAgent erişimine uygun olan
+   `~/Library/Application Support/TeleflowAgent` klasörüne kopyalar. Telegram
+   oturum verisi de bu klasöre taşınır; kaynak klasörü silmeyin.
+
 6. `cloudflared` ile bir Cloudflare Tunnel oluşturun ve HTTPS alan adını
    `http://127.0.0.1:8787` adresine yönlendirin. Ajan anahtarını gizli tutun.
 
