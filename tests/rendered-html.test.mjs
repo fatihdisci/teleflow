@@ -15,8 +15,9 @@ test("renders the Teleflow product shell", async () => {
   const html = await response.text();
   assert.match(html, /<title>Teleflow — Telegram komut akışları<\/title>/i);
   assert.match(html, /Telegram hesabını bağla/);
-  assert.match(html, /@BOT_KULLANICI_ADI/);
-  assert.match(html, /Oturum bilgileriniz yalnızca sunucuda/);
-  assert.match(html, /\/teorik karcl/);
+  assert.match(html, /@b0pt_bot/);
+  assert.match(html, /Gizli bilgiler tarayıcıya geri dönmez/);
+  assert.match(html, /\/derinlik/);
+  assert.match(html, /Hisse kodu \/ parametre/);
   assert.doesNotMatch(html, /Your site is taking shape|react-loading-skeleton|codex-preview/);
 });
