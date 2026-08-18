@@ -15,6 +15,8 @@ const b0ptCommands: Command[] = [
 const freeDepthCommands: Command[] = ["/derinlik", "/akd", "/takas", "/teorik", "/kurum"].map((text, index) => ({ id: 300 + index, text }));
 const stockCommentCommands: Command[] = ["/stop", "/ta", "/yorum", "/sinyal", "/grafik", "/plus", "/zincir", "/takasrapor", "/detay", "/canli", "/akd", "/takas", "/sepet", "/temel", "/hedef", "/ortavadede", "/trend"].map((text, index) => ({ id: 400 + index, text }));
 const ipoTheoreticalCommands: Command[] = ["karcl", "quick", "meten", "masfn", "sarae", "citas", "isvea"].map((argument, index) => ({ id: 500 + index, text: "/teorik", argument }));
+const attentionStockCodes = ["sasa", "sise", "thyao", "gundg", "ozatd", "asels", "tuprs", "tralt", "astor", "bimas"];
+const attentionCommands = (offset: number) => attentionStockCodes.map((argument, index) => ({ id: offset + index, text: "/teorik", argument }));
 const botCatalog = [
   { bot: "@b0pt_bot", label: "B0PT", commands: b0ptCommands },
   { bot: "@ucretsizderinlikbot", label: "Ücretsiz Derinlik", commands: freeDepthCommands },
@@ -28,6 +30,8 @@ const starter: Template[] = [
   { id: 4, name: "Hisse yorumları", bot: "@hisseyorumbot", commands: stockCommentCommands },
   { id: 5, name: "Son halka arzlar teorik (UDB)", bot: "@ucretsizderinlikbot", commands: ipoTheoreticalCommands },
   { id: 6, name: "Son halka arzlar teorik (BOPT)", bot: "@b0pt_bot", commands: ipoTheoreticalCommands.map((command) => ({ ...command, id: command.id + 100 })) },
+  { id: 7, name: "Dikkat çekenler (BOPT)", bot: "@b0pt_bot", commands: attentionCommands(700) },
+  { id: 8, name: "Dikkat çekenler (UDB)", bot: "@ucretsizderinlikbot", commands: attentionCommands(800) },
 ];
 
 function mergeBuiltInPresets(items: Template[]) {
@@ -36,6 +40,8 @@ function mergeBuiltInPresets(items: Template[]) {
   if (!next.some((template) => template.bot.toLowerCase() === "@hisseyorumbot")) next.push(starter[3]);
   if (!next.some((template) => template.name === starter[4].name)) next.push(starter[4]);
   if (!next.some((template) => template.name === starter[5].name)) next.push(starter[5]);
+  if (!next.some((template) => template.name === starter[6].name)) next.push(starter[6]);
+  if (!next.some((template) => template.name === starter[7].name)) next.push(starter[7]);
   return next;
 }
 
