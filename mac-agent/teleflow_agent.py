@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
 from telethon.sessions import StringSession
 
@@ -194,6 +194,7 @@ async def execute_run(job_id: str, payload: RunRequest, config: dict[str, Any]) 
                     try:
                         await conversation.send_message(command)
                         message = await conversation.get_response()
+                        message = await wait_for_edited_result(client, message)
                         job["responses"].append(await serialize_message(client, message, command))
                         break
                     except FloodWaitError as error:
@@ -221,3 +222,37 @@ async def serialize_message(client: TelegramClient, message: Any, command: str) 
             result["file_name"] = media_path.name
             result["media_url"] = f"/v1/media/{register_media(media_path)}"
     return result
+
+
+async def wait_for_edited_result(client: TelegramClient, message: Any) -> Any:
+    """Wait for bots that turn a progress message into the final media reply."""
+    progress_markers = (
+        "veri alınıyor",
+        "veri aliniyor",
+        "hazırlanıyor",
+        "hazirlaniyor",
+        "işleniyor",
+        "isleniyor",
+        "yükleniyor",
+        "yukleniyor",
+        "bekleyin",
+    )
+    if message.media or not any(marker in (message.raw_text or "").lower() for marker in progress_markers):
+        return message
+
+    loop = asyncio.get_running_loop()
+    updated = loop.create_future()
+
+    async def on_edited(event: Any) -> None:
+        edited = event.message
+        if edited.id == message.id and not updated.done():
+            updated.set_result(edited)
+
+    builder = events.MessageEdited(chats=message.chat_id)
+    client.add_event_handler(on_edited, builder)
+    try:
+        return await asyncio.wait_for(updated, timeout=90)
+    except asyncio.TimeoutError:
+        return message
+    finally:
+        client.remove_event_handler(on_edited, builder)
