@@ -1,52 +1,52 @@
 # Teleflow Mac Agent
 
-This private service runs Telegram's user API connection on your Mac mini.
-It receives signed requests only from the Teleflow web app, stores the Telegram
-session encrypted in `mac-agent/data/`, and downloads bot media locally.
+Bu özel servis Telegram kullanıcı hesabı bağlantısını Mac mini üzerinde tutar.
+İstekleri yalnızca Teleflow uygulamasından kabul eder; Telegram oturumunu
+`mac-agent/data/` altında şifreli saklar ve bot görsellerini yerelde indirir.
 
-## Prepare once
+## Bir kez yapılacak kurulum
 
-1. In Terminal, change into this `mac-agent` directory.
-2. Create the agent secrets:
+1. Terminal'de `mac-agent` klasörüne girin.
+2. İki gizli anahtar üretin. Çıktıları kimseyle paylaşmayın:
 
    ```zsh
-   openssl rand -base64 32
-   python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+   python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
+   python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
    ```
 
-3. Create `mac-agent/.env` with the two generated values:
+3. `mac-agent/.env` dosyasını oluşturup ilk çıktıyı `TELEFLOW_AGENT_TOKEN`,
+   ikinciyi `TELEFLOW_MASTER_KEY` olarak yazın.
 
    ```dotenv
-   TELEFLOW_AGENT_TOKEN=first-value
-   TELEFLOW_MASTER_KEY=second-value
+   TELEFLOW_AGENT_TOKEN=ilk-cikti
+   TELEFLOW_MASTER_KEY=ikinci-cikti
    ```
 
-4. Start the agent:
+4. Ajanı başlatın:
 
    ```zsh
    chmod +x start.sh
    ./start.sh
    ```
 
-5. For automatic startup after creating `.env`:
+5. `.env` oluşturulduktan sonra Mac açıldığında otomatik çalışması için:
 
    ```zsh
    chmod +x install-launch-agent.sh
    ./install-launch-agent.sh
    ```
 
-6. Install `cloudflared`, create a named Cloudflare Tunnel, and map its public
-   HTTPS hostname to `http://127.0.0.1:8787`. Keep the agent token private.
+6. `cloudflared` ile bir Cloudflare Tunnel oluşturun ve HTTPS alan adını
+   `http://127.0.0.1:8787` adresine yönlendirin. Ajan anahtarını gizli tutun.
 
-7. In Sites, set `MAC_AGENT_URL` to that HTTPS hostname and set
-   `MAC_AGENT_TOKEN` to the same agent token as a secret. Do not add either to
-   the browser or repository.
+7. Sites ortam değişkenlerinde `MAC_AGENT_URL` değerini HTTPS alan adı;
+   `MAC_AGENT_TOKEN` değerini de aynı ajan anahtarı olarak gizli değer şeklinde
+   kaydedin. Bunların hiçbirini tarayıcıya veya repoya eklemeyin.
 
-## Operational notes
+## Çalışma notları
 
-- First setup: enter the Telegram API values in Teleflow, then request a code
-  and complete code/2FA verification through the agent endpoints.
-- The agent retries a command after Telegram's `FLOOD_WAIT` delay.
-- Image and document replies are stored locally in `data/media/`; opaque URLs
-  are supplied to the web application for display, copying, downloading, or
-  combining.
+- İlk kurulumda Telegram API değerlerini Teleflow'a girin; ardından kodu isteyin
+  ve iki aşamalı doğrulama varsa tamamlayın.
+- Ajan, Telegram `FLOOD_WAIT` bildirirse gereken süreyi bekleyip komutu yeniden dener.
+- Görsel ve belge yanıtları `data/media/` altında tutulur. Web uygulaması bunları
+  görüntülemek, kopyalamak, indirmek veya birleştirmek için geçici kapalı bağlantılar kullanır.
