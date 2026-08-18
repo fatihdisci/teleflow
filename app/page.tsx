@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Command = { id: number; text: string };
 type Template = { id: number; name: string; bot: string; commands: Command[] };
@@ -15,6 +15,17 @@ const starter: Template[] = [
   { id: 1, name: "B0PT · Hisse ve piyasa", bot: "@b0pt_bot", commands: b0ptCommands },
   { id: 2, name: "Gün sonu özeti", bot: "@BOT_KULLANICI_ADI", commands: [{ id: 21, text: "/ozet" }] },
 ];
+
+const TELEFLOW_STORAGE_KEY = "teleflow.local.v2";
+
+type StoredState = {
+  templates?: Template[];
+  selectedId?: number;
+  interval?: number;
+  botUsername?: string;
+  commandArguments?: Record<number, string>;
+  messages?: Message[];
+};
 
 export default function Home() {
   const [tab, setTab] = useState<"flows" | "templates" | "settings">("flows");
@@ -38,16 +49,46 @@ export default function Home() {
   const [twoFactorPassword, setTwoFactorPassword] = useState("");
   const [authPhase, setAuthPhase] = useState<"idle" | "code_required" | "password_required" | "authorized">("idle");
   const [savedSetup, setSavedSetup] = useState<{ apiId: string; phoneHint: string } | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
+  const runMessageAnchor = useRef(0);
   const selected = templates.find((template) => template.id === selectedId) ?? templates[0];
   const statusText = useMemo(() => ({ idle: "Hazır", running: "Çalışıyor", paused: "Duraklatıldı" }[status]), [status]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(TELEFLOW_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as StoredState;
+        if (saved.templates?.length) setTemplates(saved.templates);
+        if (saved.selectedId) setSelectedId(saved.selectedId);
+        if (typeof saved.interval === "number") setInterval(saved.interval);
+        if (saved.botUsername) setBotUsername(saved.botUsername);
+        if (saved.commandArguments) setCommandArguments(saved.commandArguments);
+        if (saved.messages) setMessages(saved.messages);
+      }
+    } catch {
+      // Bozuk veya engellenmiş tarayıcı depolaması uygulamayı durdurmamalı.
+    } finally {
+      setStorageReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    try {
+      window.localStorage.setItem(TELEFLOW_STORAGE_KEY, JSON.stringify({ templates, selectedId, interval, botUsername, commandArguments, messages } satisfies StoredState));
+    } catch {
+      setNotice("Tarayıcı depolaması kullanılamıyor; şablonlar bu oturumla sınırlı kalabilir.");
+    }
+  }, [storageReady, templates, selectedId, interval, botUsername, commandArguments, messages]);
 
   useEffect(() => { fetch("/api/telegram/setup").then((response) => response.ok ? response.json() : null).then((data: { configured?: boolean; apiId?: string; phoneHint?: string } | null) => { if (data?.configured && data.apiId && data.phoneHint) setSavedSetup({ apiId: data.apiId, phoneHint: data.phoneHint }); }).catch(() => undefined); }, []);
 
   function addCommand() { const value = newCommand.trim(); if (!value || !selected) return; updateSelected({ ...selected, commands: [...selected.commands, { id: Date.now(), text: value.startsWith("/") ? value : `/${value}` }] }); setNewCommand(""); }
   function updateSelected(next: Template) { setTemplates((items) => items.map((item) => item.id === next.id ? next : item)); }
   function addTemplate() { const name = newTemplate.trim(); if (!name) return; const next = { id: Date.now(), name, bot: "@BOT_KULLANICI_ADI", commands: [] }; setTemplates((items) => [...items, next]); setSelectedId(next.id); setNewTemplate(""); }
-  async function run() { if (!selected?.commands.length) { setNotice("Önce en az bir komut ekleyin."); return; } const commands = selected.commands.map((command) => `${command.text}${commandArguments[command.id]?.trim() ? ` ${commandArguments[command.id].trim()}` : ""}`); setNotice(""); setStatus("running"); try { const response = await fetch("/api/telegram/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ botUsername, commands, intervalSeconds: interval }) }); const data = await response.json() as { id?: string; message?: string }; if (!response.ok || !data.id) throw new Error(data.message || "Akış başlatılamadı."); pollRun(data.id); } catch (error) { setStatus("idle"); setNotice(error instanceof Error ? error.message : "Akış başlatılamadı."); } }
-  async function pollRun(id: string) { try { const response = await fetch(`/api/telegram/run?id=${encodeURIComponent(id)}`); const data = await response.json() as { status?: string; error?: string; wait_seconds?: number; responses?: Array<{ command: string; text: string; media_url?: string | null }> }; if (!response.ok) throw new Error(data.error || "Akış durumu alınamadı."); if (data.responses) setMessages(data.responses.map((item, index) => ({ id: index + 1, command: item.command, text: item.text || "Medya yanıtı", imageUrl: item.media_url ?? undefined, time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) }))); if (data.status === "completed") { setStatus("idle"); return; } if (data.status === "failed") { setStatus("idle"); setNotice(data.error || "Telegram akışı başarısız oldu."); return; } if (data.status === "waiting_flood") setNotice(`Telegram yoğunluk sınırı: ${data.wait_seconds ?? 0} saniye bekleniyor.`); window.setTimeout(() => pollRun(id), 2000); } catch (error) { setStatus("idle"); setNotice(error instanceof Error ? error.message : "Akış durumu alınamadı."); } }
+  async function run() { if (!selected?.commands.length) { setNotice("Önce en az bir komut ekleyin."); return; } const commands = selected.commands.map((command) => `${command.text}${commandArguments[command.id]?.trim() ? ` ${commandArguments[command.id].trim()}` : ""}`); runMessageAnchor.current = messages.length; setNotice(""); setStatus("running"); try { const response = await fetch("/api/telegram/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ botUsername, commands, intervalSeconds: interval }) }); const data = await response.json() as { id?: string; message?: string }; if (!response.ok || !data.id) throw new Error(data.message || "Akış başlatılamadı."); pollRun(data.id); } catch (error) { setStatus("idle"); setNotice(error instanceof Error ? error.message : "Akış başlatılamadı."); } }
+  async function pollRun(id: string) { try { const response = await fetch(`/api/telegram/run?id=${encodeURIComponent(id)}`); const data = await response.json() as { status?: string; error?: string; wait_seconds?: number; responses?: Array<{ command: string; text: string; media_url?: string | null }> }; if (!response.ok) throw new Error(data.error || "Akış durumu alınamadı."); if (data.responses) setMessages((previous) => [...previous.slice(0, runMessageAnchor.current), ...data.responses!.map((item, index) => ({ id: runMessageAnchor.current + index + 1, command: item.command, text: item.text || "Medya yanıtı", imageUrl: item.media_url ?? undefined, time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) }))]); if (data.status === "completed") { setStatus("idle"); return; } if (data.status === "failed") { setStatus("idle"); setNotice(data.error || "Telegram akışı başarısız oldu."); return; } if (data.status === "waiting_flood") setNotice(`Telegram yoğunluk sınırı: ${data.wait_seconds ?? 0} saniye bekleniyor.`); window.setTimeout(() => pollRun(id), 2000); } catch (error) { setStatus("idle"); setNotice(error instanceof Error ? error.message : "Akış durumu alınamadı."); } }
   async function saveSetup() { if (!apiId || !apiHash || !phone) { setNotice("api_id, api_hash ve telefon numarası zorunludur."); return; } setSaving(true); setNotice(""); try { const response = await fetch("/api/telegram/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ apiId, apiHash, phone }) }); const data = await response.json() as { message?: string }; if (!response.ok) throw new Error(data.message); setApiHash(""); setSavedSetup({ apiId, phoneHint: `${phone.slice(0, 3)}••••${phone.slice(-2)}` }); setStep(3); setNotice("Bilgileriniz şifreli olarak kaydedildi."); } catch (error) { setNotice(error instanceof Error ? error.message : "Kayıt başarısız oldu."); } finally { setSaving(false); } }
   async function authenticate(action: "send-code" | "verify-code" | "verify-password") { setSaving(true); setNotice(""); try { const response = await fetch("/api/telegram/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, code: verificationCode, password: twoFactorPassword }) }); const data = await response.json() as { status?: "code_required" | "password_required" | "authorized"; message?: string; detail?: string }; if (!response.ok) throw new Error(data.message || data.detail || "Telegram doğrulanamadı."); if (data.status) setAuthPhase(data.status); setNotice(data.status === "authorized" ? "Telegram hesabı bağlandı." : data.status === "password_required" ? "İki aşamalı doğrulama parolanızı girin." : "Doğrulama kodu Telegram uygulamanıza gönderildi."); } catch (error) { setNotice(error instanceof Error ? error.message : "Telegram doğrulanamadı."); } finally { setSaving(false); } }
 
