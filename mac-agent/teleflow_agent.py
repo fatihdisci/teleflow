@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from telethon import TelegramClient, events
+from telethon import TelegramClient
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
 from telethon.sessions import StringSession
 
@@ -255,19 +255,10 @@ async def wait_for_edited_result(client: TelegramClient, message: Any) -> Any:
     if not any(marker in (message.raw_text or "").lower() for marker in progress_markers):
         return message
 
-    loop = asyncio.get_running_loop()
-    updated = loop.create_future()
-
-    async def on_edited(event: Any) -> None:
-        edited = event.message
-        if edited.id == message.id and not updated.done():
-            updated.set_result(edited)
-
-    builder = events.MessageEdited(chats=message.chat_id)
-    client.add_event_handler(on_edited, builder)
-    try:
-        return await asyncio.wait_for(updated, timeout=90)
-    except asyncio.TimeoutError:
-        return message
-    finally:
-        client.remove_event_handler(on_edited, builder)
+    original_text = message.raw_text or ""
+    for _ in range(45):
+        await asyncio.sleep(2)
+        refreshed = await client.get_messages(message.chat_id, ids=message.id)
+        if refreshed and (refreshed.media or (refreshed.raw_text or "") != original_text):
+            return refreshed
+    return message
