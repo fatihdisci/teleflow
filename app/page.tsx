@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type Command = { id: number; text: string; argument?: string };
-type Template = { id: number; name: string; bot: string; commands: Command[] };
+type Template = { id: number; name: string; bot: string; commands: Command[]; interval?: number };
 type Message = { id: number; command: string; text: string; time: string; imageUrl?: string };
 type ChatMessage = { id: number; bot: string; command: string; text: string; time: string; imageUrl?: string };
 
@@ -130,6 +130,7 @@ export default function Home() {
       setTemplates(next);
       setSelectedId(next[0]?.id ?? 0);
       setBotUsername(next[0]?.bot ?? "@b0pt_bot");
+      if (typeof next[0]?.interval === "number") setInterval(next[0].interval);
     }).catch(() => undefined).finally(() => { if (!cancelled) setRemoteReady(true); });
     return () => { cancelled = true; };
   }, []);
@@ -137,10 +138,10 @@ export default function Home() {
   useEffect(() => {
     if (!remoteReady) return;
     const timer = window.setTimeout(() => {
-      fetch("/api/flows", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ templates }) }).catch(() => undefined);
+      fetch("/api/flows", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ templates: templates.map((template) => ({ ...template, interval })) }) }).catch(() => undefined);
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [remoteReady, templates]);
+  }, [remoteReady, templates, interval]);
 
   useEffect(() => { fetch("/api/telegram/setup").then((response) => response.ok ? response.json() : null).then((data: { configured?: boolean; apiId?: string; phoneHint?: string } | null) => { if (data?.configured && data.apiId && data.phoneHint) setSavedSetup({ apiId: data.apiId, phoneHint: data.phoneHint }); }).catch(() => undefined); fetch("/api/telegram/auth").then((response) => response.ok ? response.json() : null).then((data: { status?: "authorized" | "idle" } | null) => { if (data?.status) setAuthPhase(data.status); }).catch(() => undefined); }, []);
 
