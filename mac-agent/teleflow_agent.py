@@ -236,6 +236,11 @@ async def serialize_message(client: TelegramClient, message: Any, command: str) 
 
 async def wait_for_edited_result(client: TelegramClient, message: Any) -> Any:
     """Wait for bots that turn a progress message into the final media reply."""
+    refreshed = await client.get_messages(message.chat_id, ids=message.id)
+    if refreshed:
+        message = refreshed
+    if message.media:
+        return message
     progress_markers = (
         "veri alınıyor",
         "veri aliniyor",
@@ -247,7 +252,7 @@ async def wait_for_edited_result(client: TelegramClient, message: Any) -> Any:
         "yukleniyor",
         "bekleyin",
     )
-    if message.media or not any(marker in (message.raw_text or "").lower() for marker in progress_markers):
+    if not any(marker in (message.raw_text or "").lower() for marker in progress_markers):
         return message
 
     loop = asyncio.get_running_loop()
