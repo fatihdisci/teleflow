@@ -42,7 +42,8 @@ export async function POST(request: Request) {
       ON CONFLICT(owner_id) DO UPDATE SET api_id = excluded.api_id, encrypted_api_hash = excluded.encrypted_api_hash, phone_hint = excluded.phone_hint`)
       .bind(user.userId, apiId, encryptedApiHash, phoneHint)
       .run();
-    return Response.json({ message: "Bilgileriniz Mac mini ve güvenli kayıt alanında şifreli olarak kaydedildi." });
+    const agentData = await agentResponse.clone().json().catch(() => null) as { status?: string } | null;
+    return Response.json({ message: "Bilgileriniz Mac mini ve güvenli kayıt alanında şifreli olarak kaydedildi.", status: agentData?.status });
   } catch (error) {
     console.error("Telegram setup save failed", error);
     return Response.json({ message: "Bilgiler güvenli kayıt alanına yazılamadı. Lütfen tekrar deneyin." }, { status: 500 });

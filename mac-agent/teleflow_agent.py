@@ -99,6 +99,16 @@ async def health(_: None = Depends(require_token)):
 async def setup(payload: SetupRequest, _: None = Depends(require_token)):
     if len(payload.api_hash) != 32 or not payload.api_hash.isalnum():
         raise HTTPException(status_code=400, detail="api_hash geçersiz.")
+    if CONFIG_FILE.exists():
+        existing = load_config()
+        if (
+            existing.get("api_id") == payload.api_id
+            and existing.get("api_hash") == payload.api_hash
+            and existing.get("phone") == payload.phone
+            and existing.get("session")
+            and existing.get("phase") == "authorized"
+        ):
+            return {"status": "authorized"}
     config = {"api_id": payload.api_id, "api_hash": payload.api_hash, "phone": payload.phone, "session": "", "phase": "new"}
     save_config(config)
     return {"status": "saved"}
