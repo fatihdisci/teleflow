@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -17,7 +18,9 @@ test("renders the Teleflow product shell", async () => {
   assert.match(html, /Telegram hesabını bağla/);
   assert.match(html, /@b0pt_bot/);
   assert.match(html, /Gizli bilgiler tarayıcıya geri dönmez/);
-  assert.match(html, /\/derinlik/);
+  assert.match(html, /\/ozet/);
   assert.match(html, /Hisse kodu \/ parametre/);
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /"veyas", "tknka", "kpeks"/);
   assert.doesNotMatch(html, /Your site is taking shape|react-loading-skeleton|codex-preview/);
 });
